@@ -61,10 +61,11 @@ scan(IO, PrevLine, Acc) ->
                 {ok, Lexemes, EndPosition} ->
                     Tokens = scan_tokens(Lexemes, Line),
                     io:format("~p~n", [{Tokens, EndPosition}]),
-                    Acc2 = case Acc of 
-                               [] -> [Tokens];
-                               [P | PP] -> [Tokens | [{'\n', Line} | [ P | PP]]]
-                           end,
+                    Acc2 =
+                        case Acc of
+                            [] -> [Tokens];
+                            [P | PP] -> [Tokens | [{'\n', Line} | [P | PP]]]
+                        end,
                     scan(IO, Line, Acc2);
                 Other ->
                     io:format("Failed with ~p~n", [Other]),
@@ -87,6 +88,7 @@ scan_tokens(Tokens, Line) ->
         Tokens
     ).
 
+process(Atom) when is_atom(Atom) -> Atom;
 process(';') ->
     ';';
 process(":=") ->
@@ -122,16 +124,28 @@ lexemes(String) ->
     lexemes(String, false).
 lexemes(String, Reverse) ->
     Res = lexemes(String, [], 0),
-    if Reverse ->
-           {ok, Tokens, EndP} = Res,
-           {ok, lists:reverse(Tokens), EndP};
-       true ->
-           Res
+    if
+        Reverse ->
+            {ok, Tokens, EndP} = Res,
+            {ok, lists:reverse(Tokens), EndP};
+        true ->
+            Res
     end.
 
 lexemes("", Acc, EndPosition) ->
     {ok, Acc, EndPosition};
+lexemes([$; | Rest], Acc, Col) ->
+    lexemes(Rest, [{';', Col} | Acc], Col + 1);
+lexemes([$& | Rest], Acc, Col) ->
+    lexemes(Rest, [{'&', Col} | Acc], Col + 1);
+lexemes([$: | [$= | Rest]], Acc, Col) ->
+    lexemes(Rest, [{':=', Col} | Acc], Col + 2);
+lexemes([$: | Rest], Acc, Col) ->
+    lexemes(Rest, [{':', Col} | Acc], Col + 1);
+lexemes([S | Rest], Acc, Col) when (S == $\s) or (S == $\t) ->
+    lexemes(Rest, Acc, Col + 1);
 lexemes(String, Acc, Col) ->
+    %% rollout all this to the most boring state
     {Leading, Trailing} = string:take(String, ?seps, true),
     io:format("Leading=~p, Trailing=~p, ~n", [Leading, Trailing]),
     {Ignore, Remain} = string:take(Trailing, ?seps),
@@ -160,15 +174,19 @@ lexemes_test_() ->
                 [
                     {"def", 0},
                     {"x", 4},
-                    {":=", 6},
+                    {':=', 6},
                     {"3", 9},
                     {';', 10},
                     {"y", 12},
-                    {":=", 14},
+                    {':=', 14},
                     {"4", 17}
                 ],
                 18},
             lexemes("def x := 3; y := 4", true)
+        ),
+        ?_assertMatch(
+            {ok, [{'&', 0}, {"x", 1}, {':=', 3}, {"4", 6}, {';', 7}], 8},
+            lexemes("&x := 4;", true)
         )
         %% ideally this should work too
         % ?_assertMatch(
