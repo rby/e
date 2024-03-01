@@ -61,7 +61,11 @@ scan(IO, PrevLine, Acc) ->
                 {ok, Lexemes, EndPosition} ->
                     Tokens = scan_tokens(Lexemes, Line),
                     io:format("~p~n", [{Tokens, EndPosition}]),
-                    scan(IO, Line, [Tokens | Acc]);
+                    Acc2 = case Acc of 
+                               [] -> [Tokens];
+                               [P | PP] -> [Tokens | [{'\n', Line} | [ P | PP]]]
+                           end,
+                    scan(IO, Line, Acc2);
                 Other ->
                     io:format("Failed with ~p~n", [Other]),
                     {error, Other}
@@ -115,7 +119,16 @@ process(X) ->
     end.
 
 lexemes(String) ->
-    lexemes(String, [], 0).
+    lexemes(String, false).
+lexemes(String, Reverse) ->
+    Res = lexemes(String, [], 0),
+    if Reverse ->
+           {ok, Tokens, EndP} = Res,
+           {ok, lists:reverse(Tokens), EndP};
+       true ->
+           Res
+    end.
+
 lexemes("", Acc, EndPosition) ->
     {ok, Acc, EndPosition};
 lexemes(String, Acc, Col) ->
@@ -145,17 +158,17 @@ lexemes_test_() ->
         ?_assertMatch(
             {ok,
                 [
-                    {"4", 17},
-                    {":=", 14},
-                    {"y", 12},
-                    {';', 10},
-                    {"3", 9},
-                    {":=", 6},
+                    {"def", 0},
                     {"x", 4},
-                    {"def", 0}
+                    {":=", 6},
+                    {"3", 9},
+                    {';', 10},
+                    {"y", 12},
+                    {":=", 14},
+                    {"4", 17}
                 ],
                 18},
-            lexemes("def x := 3; y := 4")
+            lexemes("def x := 3; y := 4", true)
         )
         %% ideally this should work too
         % ?_assertMatch(

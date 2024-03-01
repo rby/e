@@ -36,6 +36,7 @@ emethod emethods
 verb
 matcher escript behavior
 texts
+newlines
 doc_comment.
 
 Terminals
@@ -58,7 +59,7 @@ Rootsymbol seq_expr.
 %% Rules
 
 seq_expr -> e_expr : ['$1'].
-seq_expr -> e_expr '\n' seq_expr : ['$1'|'$3'].
+seq_expr -> e_expr newlines seq_expr : ['$1'|'$3'].
 seq_expr -> e_expr ';'  seq_expr : ['$1'|'$3'].
 e_expr -> char: '$1'.
 e_expr -> integer: '$1'.
@@ -138,7 +139,10 @@ e_exprs -> e_expr ',' e_exprs: ['$1' | '$2'].
 doc_comment -> '/**' '*/' : {comment, []}.
 doc_comment -> '/**' texts '*/' : {comment, []}.
 texts -> text : ['$1'].
-texts -> text '\n' texts: ['$1' | '$2'].
+texts -> text newlines texts: ['$1' | '$2'].
+
+newlines -> '\n'.
+newlines -> '\n' newlines.
 
 Header
 "%% This is the Elang compiler"
