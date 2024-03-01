@@ -20,14 +20,34 @@ main(Args) ->
             [] -> {ok, standard_io};
             [FileName | _] -> file:open(FileName, [read, {encoding, utf8}])
         end,
-    {ok, Data} = file:read(IO, 10),
 
-    io:format("Data: ~p~n", [Data]),
+    {ok, _Parsed} = parse(IO),
+
+    ok =
+        if
+            IO /= standard_io -> file:close(IO);
+            true -> ok
+        end,
 
     erlang:halt(0).
 %% Internal functions
 %%====================================================================
 %%
+%%
+parse(IO) ->
+    case scan(IO) of
+        {ok, Tokens} ->
+            case elang_parser:parse(Tokens) of
+                {ok, Result} ->
+                    io:format("Parsed:~n~p~n", [Result]),
+                    {ok, Result};
+                {error, Err} ->
+                    io:format("Failed:~n~p~n", [Err]),
+                    {error, Err}
+            end;
+        {error, Err} ->
+            {error, Err}
+    end.
 %% tokenizer
 %%
 scan(IO) ->
@@ -37,20 +57,67 @@ scan(IO, PrevLine, Acc) ->
     case file:read_line(IO) of
         {ok, Data} ->
             Line = PrevLine + 1,
-
-            Tokens = scan_tokens(lexemes(string:trim(Data)), Line);
+            case lexemes(string:trim(Data)) of
+                {ok, Lexemes, EndPosition} ->
+                    Tokens = scan_tokens(Lexemes, Line),
+                    io:format("~p~n", [{Tokens, EndPosition}]),
+                    scan(IO, Line, [Tokens | Acc]);
+                Other ->
+                    io:format("Failed with ~p~n", [Other]),
+                    {error, Other}
+            end;
         eof ->
-            something
+            {ok, lists:reverse(lists:flatten(Acc))}
     end.
 
 scan_tokens(Tokens, Line) ->
-    %% TODO
-    Tokens.
+    lists:map(
+        fun({Token, Col}) ->
+            Position = {Line, Col},
+            Token2 = process(Token),
+            case Token2 of
+                {Cat, Sym} -> {Cat, Position, Sym};
+                _ -> {Token2, Position}
+            end
+        end,
+        Tokens
+    ).
+
+process(';') ->
+    ';';
+process(":=") ->
+    ':=';
+process("_") ->
+    '_';
+process(X) ->
+    Identity = fun(Y) -> Y end,
+    Regs = [
+        {"[+-]?[0-9][0-9_]*", integer, fun erlang:list_to_integer/1},
+        {"[+-]?([0-9]*[.])?[0-9]+", float64, fun erlang:list_to_float/1},
+        {"[_a-zA-Z]?[a-zA-Z_0-9]*", identifier, Identity}
+    ],
+    case
+        lists:dropwhile(
+            fun({Re, _, _}) ->
+                case re:run(X, Re) of
+                    match -> false;
+                    {match, _} -> false;
+                    _ -> true
+                end
+            end,
+            Regs
+        )
+    of
+        [{_, Cat, Tr} | _] ->
+            {Cat, Tr(X)};
+        _ ->
+            X
+    end.
 
 lexemes(String) ->
     lexemes(String, [], 0).
 lexemes("", Acc, EndPosition) ->
-    {ok, lists:reverse(Acc), EndPosition};
+    {ok, Acc, EndPosition};
 lexemes(String, Acc, Col) ->
     {Leading, Trailing} = string:take(String, ?seps, true),
     io:format("Leading=~p, Trailing=~p, ~n", [Leading, Trailing]),
@@ -75,37 +142,37 @@ lexemes(String, Acc, Col) ->
 
 lexemes_test_() ->
     [
-    ?_assertMatch(
-       {ok,
-        [
-         {"def", 0},
-         {"x", 4},
-         {":=", 6},
-         {"3", 9},
-         {';', 10},
-         {"y", 12},
-         {":=", 14},
-         {"4", 17}
-        ],
-        18},
-       lexemes("def x := 3; y := 4")
-      )
-    %% ideally this should work too
-    % ?_assertMatch(
-    %    {ok,
-    %     [
-    %      {"def", 0},
-    %      {"x", 4},
-    %      {":=", 6},
-    %      {"3", 9},
-    %      {';', 10},
-    %      {"y", 12},
-    %      {":=", 14},
-    %      {"4", 17}
-    %     ],
-    %     18},
-    %    lexemes("def x:=3;y:=4")
-    %   )
+        ?_assertMatch(
+            {ok,
+                [
+                    {"4", 17},
+                    {":=", 14},
+                    {"y", 12},
+                    {';', 10},
+                    {"3", 9},
+                    {":=", 6},
+                    {"x", 4},
+                    {"def", 0}
+                ],
+                18},
+            lexemes("def x := 3; y := 4")
+        )
+        %% ideally this should work too
+        % ?_assertMatch(
+        %    {ok,
+        %     [
+        %      {"def", 0},
+        %      {"x", 4},
+        %      {":=", 6},
+        %      {"3", 9},
+        %      {';', 10},
+        %      {"y", 12},
+        %      {":=", 14},
+        %      {"4", 17}
+        %     ],
+        %     18},
+        %    lexemes("def x:=3;y:=4")
+        %   )
     ].
 
 -endif.
