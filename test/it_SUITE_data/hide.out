@@ -1,0 +1,3 @@
+[{hide,[{':=',{identifier,{2,2},"a"},{integer,{2,7},1}},
+                {':=',{identifier,{3,2},"b"},
+                      {identifier,{3,6},"some string"}}]}]

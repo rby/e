@@ -10,7 +10,6 @@
 
 %% escript Entry point
 main(Args) ->
-    
     io:format(standard_error, "Args: ~p~n", [Args]),
     {ok, IO} =
         case Args of
@@ -22,7 +21,6 @@ main(Args) ->
         {ok, Parsed} -> io:format("Parsed: ~p~n", [Parsed]);
         {error, Reason} -> io:format("Failed: ~p~n", [Reason])
     end,
-
 
     ok =
         if
