@@ -9,21 +9,21 @@
 
 -define(Spaces, #{$\t => 1, $\s => 1}).
 -define(seps, [$\t, $;, $\s]).
--define(IdentifierChars, "_" ++  lists:seq($a, $z) ++ lists:seq($0, $9) ++ lists:seq($A, $Z)).
+-define(IdentifierChars, "_" ++ lists:seq($a, $z) ++ lists:seq($0, $9) ++ lists:seq($A, $Z)).
 %%====================================================================
 %% API functions
 %%====================================================================
 
 %% escript Entry point
 main(Args) ->
-    io:format("Args: ~p~n", [Args]),
+    io:format(standard_error, "Args: ~p~n", [Args]),
     {ok, IO} =
         case Args of
             [] -> {ok, standard_io};
             [FileName | _] -> file:open(FileName, [read, {encoding, utf8}])
         end,
 
-    {ok, _Parsed} = parse(IO),
+   _ = parse(IO),
 
     ok =
         if
@@ -53,28 +53,54 @@ parse(IO) ->
 %% tokenizer
 %%
 scan(IO) ->
-    scan(IO, 0, []).
+    scan(IO, 0, [], "", none).
 
-scan(IO, PrevLine, Acc) ->
-    case file:read_line(IO) of
-        {ok, Data} ->
-            Line = PrevLine + 1,
-            case lexemes(string:trim(Data)) of
-                {ok, Lexemes, EndPosition} ->
-                    Tokens = scan_tokens(Lexemes, Line),
-                    io:format("~p~n", [{Tokens, EndPosition}]),
-                    Acc2 =
-                        case Acc of
-                            [] -> [Tokens];
-                            [P | PP] -> [Tokens | [{'\n', Line} | [P | PP]]]
-                        end,
-                    scan(IO, Line, Acc2);
-                Other ->
-                    io:format("Failed with ~p~n", [Other]),
-                    {error, Other}
+scan(IO, PrevLine, Acc, Input, Cont) ->
+    %% we should call this only on certain condition
+    %% which is when we consumed everything
+    Res =
+        case Input of
+            "" ->
+                case file:read_line(IO) of
+                    {ok, LineRead} -> {ok, string:chomp(LineRead), PrevLine + 1};
+                    eof -> eof
+                end;
+            %% previous data to continue to consume on the same line.
+            _ ->
+                {ok, Input, PrevLine}
+        end,
+
+    case Res of
+        {ok, Data, Line} ->
+            case Cont of
+                none ->
+                    case lexemes(Data) of
+                        {ok, Lexemes, _} ->
+                            Tokens = scan_tokens(Lexemes, Line),
+                            Acc2 =
+                                case Acc of
+                                    [] -> [Tokens];
+                                    _ -> [Tokens | Acc]
+                                end,
+                            scan(IO, Line, Acc2, "", none);
+                        {more, Acc2, _Col, Cont} ->
+                            scan(IO, Line, Acc2, "", {cont, Cont});
+                        Other ->
+                            io:format(standard_error, "Failed with ~p~n", [Other]),
+                            {error, Other}
+                    end;
+                {cont, C} ->
+                    case C(Data, Acc, 0) of
+                        {ok, Acc2, Remain, _Col} ->
+                            scan(IO, Line, Acc2, Remain, none);
+                        {more, Acc2, _Col, Cont2} ->
+                            scan(IO, Line, Acc2, "", {cont, Cont2})
+                    end
             end;
         eof ->
-            {ok, lists:reverse(lists:flatten(Acc))}
+            Tokens = lists:reverse(lists:flatten(Acc)),
+            io:format(standard_error, "Tokens:~n---~n~p~n---~n", [Tokens]),
+            {ok, Tokens}
     end.
 
 scan_tokens(Tokens, Line) ->
@@ -93,11 +119,12 @@ scan_tokens(Tokens, Line) ->
 process(Atom) when is_atom(Atom) -> Atom;
 process(F) when is_float(F) -> {float64, F};
 process(I) when is_integer(I) -> {integer, I};
+process(Term = {Cat, _Sym}) when is_atom(Cat) -> Term;
 process("_") ->
     '_';
 process(X) ->
     Identity = fun(Y) -> Y end,
-    %% TODO those cases will not happen anymore we parse 
+    %% TODO those cases will not happen anymore we parse
     %% we should parse all in lexemes
     Regs = [
         {"[+-]?[0-9][0-9_]*", integer, fun erlang:list_to_integer/1},
@@ -201,27 +228,34 @@ lexemes("/**" ++ Rest, Acc, Col) ->
     %% this one tricky we should return something like
     %% {more,...}
     %% 😩
-    lexemes(Rest, [{'/**', Col} | Acc], Col + 3);
+    ConsumeComment = fun(Data, Accum, ColArg) ->
+        case read_until(Data, "*/", ColArg) of
+            {ok, Comment, Remain, Col2} ->
+                {ok, [{{text, Comment}, Col2} | Accum], Remain, Col2};
+            {more, Comment, Col2} ->
+                {more, [{{text, Comment}, Col2} | Accum], Col2}
+        end
+    end,
+    case ConsumeComment(Rest, [{'/**', Col} | Acc], Col + 3) of
+        {ok, Acc2, Rest2, Col2} -> lexemes(Rest2, Acc2, Col2);
+        {more, Acc2, Col2} -> {more, Acc2, Col2, ConsumeComment}
+    end;
 lexemes("*/" ++ Rest, Acc, Col) ->
     lexemes(Rest, [{'*/', Col} | Acc], Col + 2);
-lexemes(String = [$"| _], Acc, Col) ->
+lexemes(String = [$" | _], Acc, Col) ->
     {ok, Str, Col2, Rest} = lexemes_string(String, Col + 1),
     %% XXX should be {string, Str} ! really
-    lexemes(Rest, [{Str, Col}| Acc], Col2);
-lexemes(String = [$'| _], Acc, Col) ->
+    lexemes(Rest, [{Str, Col} | Acc], Col2);
+lexemes(String = [$' | _], Acc, Col) ->
     {ok, Char, Col2, Rest} = lexemes_char(String, Col),
-    lexemes(Rest, [{Char, Col}| Acc], Col2);
-
+    lexemes(Rest, [{Char, Col} | Acc], Col2);
 lexemes([$_, S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
     lexemes(Rest, [{$_, Col} | Acc], Col + 2);
-
 lexemes([$_, $; | Rest], Acc, Col) ->
     lexemes(Rest, [{$;, Col + 1}, {$_, Col} | Acc], Col + 2);
-
-lexemes(String = [S|_], Acc, Col) when S == $_; S >= $a, S =< $z; S >= $A, S =< $Z ->
+lexemes(String = [S | _], Acc, Col) when S == $_; S >= $a, S =< $z; S >= $A, S =< $Z ->
     {ok, Id, Col2, Rest} = lexemes_identifier(String, Col),
     lexemes(Rest, [{Id, Col} | Acc], Col2);
-
 lexemes(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
     {ok, Number, Rest, Col2} = lexemes_number(String, Col),
     lexemes(Rest, [{Number, Col} | Acc], Col2);
@@ -239,7 +273,7 @@ lexemes(String, Acc, Col) ->
             Acc2 =
                 case string:find(Ignore, ";") of
                     nomatch -> [{Leading, Col} | Acc];
-                    SemiColRem -> [{';', NewCol - length(SemiColRem)} ,{Leading, Col} | Acc]
+                    SemiColRem -> [{';', NewCol - length(SemiColRem)}, {Leading, Col} | Acc]
                 end,
 
             lexemes(Remain, Acc2, NewCol);
@@ -248,16 +282,24 @@ lexemes(String, Acc, Col) ->
             lexemes(Remain, Acc, NewCol)
     end.
 
-lexemes_identifier(S , Col) ->
+read_until(String, To, Col) ->
+    case string:find(String, To) of
+        nomatch ->
+            {more, String, Col + length(String)};
+        Suffix ->
+            Comment = string:slice(String, 0, length(String) - length(Suffix)),
+            {ok, Comment, Suffix, Col + length(Comment)}
+    end.
+
+lexemes_identifier(S, Col) ->
     case string:take(S, ?IdentifierChars) of
         {Lead, Tail} -> {ok, Lead, Col + length(Lead), Tail}
     end.
-    
 
-lexemes_string([$"| String], Col) ->
+lexemes_string([$" | String], Col) ->
     case string:take(String, [$"], true) of
         {_, []} -> {error, String};
-        {Lead, [$"| Tail]} -> {ok, Lead, Col + length(Lead) + 1, Tail}
+        {Lead, [$" | Tail]} -> {ok, Lead, Col + length(Lead) + 1, Tail}
     end.
 lexemes_char([$', $\\, S, $' | Rest], Col) ->
     case S of
@@ -268,7 +310,7 @@ lexemes_char([$', $\\, S, $' | Rest], Col) ->
         $b -> {ok, $\b, Col + 4, Rest};
         _ -> {error, not_char}
     end;
-lexemes_char([$', S, $'| Rest], Col) ->
+lexemes_char([$', S, $' | Rest], Col) ->
     {ok, S, Col + 3, Rest};
 lexemes_char(_, _) ->
     {error, not_char}.
@@ -296,17 +338,17 @@ lexemes_float(String, Col, NumStr) ->
 -ifdef(TEST).
 lexemes_identifier_test_() ->
     [
-    ?_assertMatch({ok, "_abC3", 5, " := bc"}, lexemes_identifier("_abC3 := bc", 0)),
-    ?_assertMatch({ok, "abE__34", 7, ""}, lexemes_identifier("abE__34", 0))
+        ?_assertMatch({ok, "_abC3", 5, " := bc"}, lexemes_identifier("_abC3 := bc", 0)),
+        ?_assertMatch({ok, "abE__34", 7, ""}, lexemes_identifier("abE__34", 0))
     ].
 lexemes_char_test_() ->
     [
-    ?_assertMatch({ok, $a, 3, " ; bc"}, lexemes_char("'a' ; bc", 0)),
-    ?_assertMatch({ok, $\s, 4, " ; bc"}, lexemes_char("'\\s' ; bc", 0))
+        ?_assertMatch({ok, $a, 3, " ; bc"}, lexemes_char("'a' ; bc", 0)),
+        ?_assertMatch({ok, $\s, 4, " ; bc"}, lexemes_char("'\\s' ; bc", 0))
     ].
 lexemes_string_test_() ->
     [
-    ?_assertMatch({ok, "abc", 4, " some a"}, lexemes_string("\"abc\" some a", 0))
+        ?_assertMatch({ok, "abc", 4, " some a"}, lexemes_string("\"abc\" some a", 0))
     ].
 lexemes_number_test_() ->
     [
