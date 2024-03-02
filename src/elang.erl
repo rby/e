@@ -96,6 +96,8 @@ process("_") ->
     '_';
 process(X) ->
     Identity = fun(Y) -> Y end,
+    %% TODO those cases will not happen anymore we parse 
+    %% we should parse all in lexemes
     Regs = [
         {"[+-]?[0-9][0-9_]*", integer, fun erlang:list_to_integer/1},
         {"[+-]?([0-9]*[.])?[0-9]+", float64, fun erlang:list_to_float/1},
@@ -195,9 +197,22 @@ lexemes("match" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
 lexemes("implements" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
     lexemes(Rest, [{'implements', Col} | Acc], Col + 11);
 lexemes("/**" ++ Rest, Acc, Col) ->
+    %% this one tricky we should return something like
+    %% {more,...}
+    %% 😩
     lexemes(Rest, [{'/**', Col} | Acc], Col + 3);
 lexemes("*/" ++ Rest, Acc, Col) ->
     lexemes(Rest, [{'*/', Col} | Acc], Col + 2);
+lexemes(String = [$"| _], Acc, Col) ->
+    {ok, Str, Col2, Rest} = lexemes_string(String, Col + 1),
+    %% XXX should be {string, Str} ! really
+    lexemes(Rest, [{Str, Col}| Acc], Col2);
+lexemes([$_, S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    lexemes(Rest, [{$_, Col} | Acc], Col + 2);
+
+lexemes([$_, $; | Rest], Acc, Col) ->
+    lexemes(Rest, [{$;, Col + 1}, {$_, Col} | Acc], Col + 2);
+
 lexemes(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
     {ok, Number, Rest, Col2} = lexemes_number(String, Col),
     lexemes(Rest, [{Number, Col} | Acc], Col2);
@@ -215,13 +230,19 @@ lexemes(String, Acc, Col) ->
             Acc2 =
                 case string:find(Ignore, ";") of
                     nomatch -> [{Leading, Col} | Acc];
-                    SemiColRem -> [{';', NewCol - length(SemiColRem)} | [{Leading, Col} | Acc]]
+                    SemiColRem -> [{';', NewCol - length(SemiColRem)} ,{Leading, Col} | Acc]
                 end,
 
             lexemes(Remain, Acc2, NewCol);
         true ->
             %% just ignore Leading
             lexemes(Remain, Acc, NewCol)
+    end.
+
+lexemes_string([$"| String], Col) ->
+    case string:take(String, [$"], true) of
+        {_, []} -> {error, String};
+        {Lead, [$"| Tail]} -> {ok, Lead, Col + length(Lead) + 1, Tail}
     end.
 
 lexemes_number([$+ | Rest], Col) ->
@@ -245,7 +266,10 @@ lexemes_float(String, Col, NumStr) ->
     {ok, list_to_float(lists:reverse(NumStr)), Col, String}.
 
 -ifdef(TEST).
-
+lexemes_string_test_() ->
+    [
+    ?_assertMatch({ok, "abc", 4, " some a"}, lexemes_string("\"abc\" some a", 0))
+    ].
 lexemes_number_test_() ->
     [
         ?_assertMatch({ok, -23.34, 1 + 6, " def"}, lexemes_number("-23.34 def", 1)),
@@ -273,22 +297,6 @@ lexemes_test_() ->
             {ok, [{'&', 0}, {"x", 1}, {':=', 3}, {4, 6}, {';', 7}], 8},
             lexemes("&x := 4;", true)
         )
-        %% ideally this should work too
-        % ?_assertMatch(
-        %    {ok,
-        %     [
-        %      {"def", 0},
-        %      {"x", 4},
-        %      {":=", 6},
-        %      {"3", 9},
-        %      {';', 10},
-        %      {"y", 12},
-        %      {":=", 14},
-        %      {"4", 17}
-        %     ],
-        %     18},
-        %    lexemes("def x:=3;y:=4")
-        %   )
     ].
 
 -endif.
