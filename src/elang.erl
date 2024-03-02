@@ -23,7 +23,7 @@ main(Args) ->
             [FileName | _] -> file:open(FileName, [read, {encoding, utf8}])
         end,
 
-   _ = parse(IO),
+    _ = parse(IO),
 
     ok =
         if
@@ -262,25 +262,7 @@ lexemes(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
 lexemes([S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
     lexemes(Rest, Acc, Col + 1);
 lexemes(String, Acc, Col) ->
-    %% rollout all this to the most boring state
-    {Leading, Trailing} = string:take(String, ?seps, true),
-    io:format("Leading=~p, Trailing=~p, ~n", [Leading, Trailing]),
-    {Ignore, Remain} = string:take(Trailing, ?seps),
-    NewCol = Col + length(Leading) + length(Ignore),
-
-    if
-        Leading /= "" ->
-            Acc2 =
-                case string:find(Ignore, ";") of
-                    nomatch -> [{Leading, Col} | Acc];
-                    SemiColRem -> [{';', NewCol - length(SemiColRem)}, {Leading, Col} | Acc]
-                end,
-
-            lexemes(Remain, Acc2, NewCol);
-        true ->
-            %% just ignore Leading
-            lexemes(Remain, Acc, NewCol)
-    end.
+    erlang:error(io_lib:format("unexepected input: \"~p\"~nAcc: ~p~nCol:~p~n", [String, Acc, Col])).
 
 read_until(String, To, Col) ->
     case string:find(String, To) of
