@@ -9,6 +9,7 @@
 
 -define(Spaces, #{$\t => 1, $\s => 1}).
 -define(seps, [$\t, $;, $\s]).
+-define(IdentifierChars, "_" ++  lists:seq($a, $z) ++ lists:seq($0, $9) ++ lists:seq($A, $Z)).
 %%====================================================================
 %% API functions
 %%====================================================================
@@ -207,11 +208,19 @@ lexemes(String = [$"| _], Acc, Col) ->
     {ok, Str, Col2, Rest} = lexemes_string(String, Col + 1),
     %% XXX should be {string, Str} ! really
     lexemes(Rest, [{Str, Col}| Acc], Col2);
+lexemes(String = [$'| _], Acc, Col) ->
+    {ok, Char, Col2, Rest} = lexemes_char(String, Col),
+    lexemes(Rest, [{Char, Col}| Acc], Col2);
+
 lexemes([$_, S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
     lexemes(Rest, [{$_, Col} | Acc], Col + 2);
 
 lexemes([$_, $; | Rest], Acc, Col) ->
     lexemes(Rest, [{$;, Col + 1}, {$_, Col} | Acc], Col + 2);
+
+lexemes(String = [S|_], Acc, Col) when S == $_; S >= $a, S =< $z; S >= $A, S =< $Z ->
+    {ok, Id, Col2, Rest} = lexemes_identifier(String, Col),
+    lexemes(Rest, [{Id, Col} | Acc], Col2);
 
 lexemes(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
     {ok, Number, Rest, Col2} = lexemes_number(String, Col),
@@ -239,11 +248,30 @@ lexemes(String, Acc, Col) ->
             lexemes(Remain, Acc, NewCol)
     end.
 
+lexemes_identifier(S , Col) ->
+    case string:take(S, ?IdentifierChars) of
+        {Lead, Tail} -> {ok, Lead, Col + length(Lead), Tail}
+    end.
+    
+
 lexemes_string([$"| String], Col) ->
     case string:take(String, [$"], true) of
         {_, []} -> {error, String};
         {Lead, [$"| Tail]} -> {ok, Lead, Col + length(Lead) + 1, Tail}
     end.
+lexemes_char([$', $\\, S, $' | Rest], Col) ->
+    case S of
+        $s -> {ok, $\s, Col + 4, Rest};
+        $r -> {ok, $\r, Col + 4, Rest};
+        $t -> {ok, $\t, Col + 4, Rest};
+        $n -> {ok, $\n, Col + 4, Rest};
+        $b -> {ok, $\b, Col + 4, Rest};
+        _ -> {error, not_char}
+    end;
+lexemes_char([$', S, $'| Rest], Col) ->
+    {ok, S, Col + 3, Rest};
+lexemes_char(_, _) ->
+    {error, not_char}.
 
 lexemes_number([$+ | Rest], Col) ->
     lexemes_number(Rest, Col + 1, []);
@@ -266,6 +294,16 @@ lexemes_float(String, Col, NumStr) ->
     {ok, list_to_float(lists:reverse(NumStr)), Col, String}.
 
 -ifdef(TEST).
+lexemes_identifier_test_() ->
+    [
+    ?_assertMatch({ok, "_abC3", 5, " := bc"}, lexemes_identifier("_abC3 := bc", 0)),
+    ?_assertMatch({ok, "abE__34", 7, ""}, lexemes_identifier("abE__34", 0))
+    ].
+lexemes_char_test_() ->
+    [
+    ?_assertMatch({ok, $a, 3, " ; bc"}, lexemes_char("'a' ; bc", 0)),
+    ?_assertMatch({ok, $\s, 4, " ; bc"}, lexemes_char("'\\s' ; bc", 0))
+    ].
 lexemes_string_test_() ->
     [
     ?_assertMatch({ok, "abc", 4, " some a"}, lexemes_string("\"abc\" some a", 0))
