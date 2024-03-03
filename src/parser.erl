@@ -219,9 +219,6 @@ lexemes("match" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
 lexemes("implements" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
     lexemes(Rest, [{'implements', Col} | Acc], Col + 11);
 lexemes("/**" ++ Rest, Acc, Col) ->
-    %% this one tricky we should return something like
-    %% {more,...}
-    %% 😩
     ConsumeComment = fun(Data, Accum, ColArg) ->
         case read_until(Data, "*/", ColArg) of
             {ok, Comment, Remain, Col2} ->

@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 for f in test/it_SUITE_data/*.e; do
 	cat $f \
 	| _build/default/bin/elang 2>/dev/null \
