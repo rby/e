@@ -11,6 +11,8 @@
 
 %%
 %% Parses from an open IODevice
+-spec parse(IO :: io:device()) -> Result when
+      Result :: {ok, term()} | {error, string()}.
 parse(IO) -> parse(IO, false).
 parse(IO, Verbose) ->
     case scan(IO) of

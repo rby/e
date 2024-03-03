@@ -18,8 +18,8 @@ main(Args) ->
         end,
 
     case parser:parse(IO) of
-        {ok, Parsed} -> io:format("Parsed: ~p~n", [Parsed]);
-        {error, Reason} -> io:format("Failed: ~p~n", [Reason])
+        {ok, Parsed} -> io:format("Parsed:~n~p~n", [Parsed]);
+        {error, Reason} -> io:format("Failed:~n~p~n", [Reason])
     end,
 
     ok =

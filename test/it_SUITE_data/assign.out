@@ -1,9 +1,9 @@
 [{':=',{identifier,{1,0},"a"},{integer,{1,5},23}},
-         {':=',{identifier,{2,0},"b"},{float64,{2,5},44.323}},
-         {':=',{identifier,{3,0},"c"},{identifier,{3,5},"some string"}},
-         {':=',{identifier,{4,0},"d"},
-               {call,{call,{identifier,{4,5},"a"},
-                           {identifier,{4,7},"call"},
-                           [{identifier,{4,12},"b"}]},
-                     {identifier,{4,15},"andThen"},
-                     [{identifier,{4,23},"c"}]}}]
+ {':=',{identifier,{2,0},"b"},{float64,{2,5},44.323}},
+ {':=',{identifier,{3,0},"c"},{identifier,{3,5},"some string"}},
+ {':=',{identifier,{4,0},"d"},
+       {call,{call,{identifier,{4,5},"a"},
+                   {identifier,{4,7},"call"},
+                   [{identifier,{4,12},"b"}]},
+             {identifier,{4,15},"andThen"},
+             [{identifier,{4,23},"c"}]}}]
