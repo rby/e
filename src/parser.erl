@@ -12,7 +12,7 @@
 %%
 %% Parses from an open IODevice
 -spec parse(IO :: io:device()) -> Result when
-      Result :: {ok, term()} | {error, string()}.
+    Result :: {ok, term()} | {error, string()}.
 parse(IO) -> parse(IO, false).
 parse(IO, Verbose) ->
     case scan(IO) of
@@ -30,9 +30,24 @@ parse(IO, Verbose) ->
     end.
 %% tokenizer
 %%
+-spec scan(IO :: io:device()) -> Return when
+    Return :: {ok, [term()]} | {error, string()}.
 scan(IO) ->
     scan(IO, 0, [], "", none).
 
+-spec scan(
+    IO :: io:device(),
+    PrevLine :: int,
+    Acc :: [Token],
+    Input :: string(),
+    Cont :: function()
+) -> {ok, [term()]} | {error, string()} when
+    Line :: int,
+    Column :: int,
+    Position :: {Line, Column},
+    Token :: {{Category, Symbol}, Position},
+    Category :: atom(),
+    Symbol :: string().
 scan(IO, PrevLine, Acc, Input, Cont) ->
     %% we should call this only on certain condition
     %% which is when we consumed everything
