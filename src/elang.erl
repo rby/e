@@ -1,7 +1,5 @@
 -module(elang).
 
-%% API exports
-%% TODO remove lexemes or actually moved completely outside of this file
 -export([main/1]).
 
 %%====================================================================

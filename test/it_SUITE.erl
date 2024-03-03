@@ -34,7 +34,8 @@ compile_all(Config) ->
             %% how do I load the term in .out file?
 
             {ok, Parsed} = parser:parse(IO),
-            (Parsed == Expected) orelse ct:fail({{exepected, Expected}, {got, Parsed}})
+            (Parsed == Expected) orelse
+                ct:fail({{test, FullName}, {exepected, Expected}, {got, Parsed}})
         end,
         EFiles
     ),
