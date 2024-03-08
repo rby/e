@@ -113,8 +113,7 @@ update_line(Tokens, Line) ->
 process(Atom) when is_atom(Atom) -> Atom;
 process(F) when is_float(F) -> {float64, F};
 process(I) when is_integer(I) -> {integer, I};
-process(Term = {Cat, _Sym}) when is_atom(Cat) -> Term;
-process(X) -> {unexpected, X}.
+process(Term = {Cat, _Sym}) when is_atom(Cat) -> Term.
 
 -spec tokens(String :: list()) -> {ok, Tokens, EndPosition} | {more, Tokens, Column, Cont} when
     Cont :: function(),
