@@ -67,7 +67,7 @@ scan(IO, PrevLine, Acc, Input, Cont) ->
         {ok, Data, Line} ->
             case Cont of
                 none ->
-                    case lexemes(Data) of
+                    case tokens(Data) of
                         {ok, Lexemes, _} ->
                             Tokens = scan_tokens(Lexemes, Line),
                             Acc2 =
@@ -116,11 +116,14 @@ process(I) when is_integer(I) -> {integer, I};
 process(Term = {Cat, _Sym}) when is_atom(Cat) -> Term;
 process(X) -> {unexpected, X}.
 
-%% TODO add spec
-lexemes(String) ->
-    lexemes(String, false).
-lexemes(String, Reverse) ->
-    Res = lexemes(String, [], 0),
+-spec tokens(String :: list()) -> {ok, Tokens, EndPosition} when
+    Token :: {atom(), list() | atom(), integer()} | {error, list()},
+    EndPosition :: integer(),
+    Tokens :: [Token].
+tokens(String) ->
+    tokens(String, false).
+tokens(String, Reverse) ->
+    Res = tokens(String, [], 0),
     if
         Reverse ->
             {ok, Tokens, EndP} = Res,
@@ -129,70 +132,70 @@ lexemes(String, Reverse) ->
             Res
     end.
 
-lexemes("", Acc, EndPosition) ->
+tokens("", Acc, EndPosition) ->
     {ok, Acc, EndPosition};
-lexemes([$; | Rest], Acc, Col) ->
-    lexemes(Rest, [{';', Col} | Acc], Col + 1);
-lexemes([$. | Rest], Acc, Col) ->
-    lexemes(Rest, [{'.', Col} | Acc], Col + 1);
-lexemes([$& | Rest], Acc, Col) ->
-    lexemes(Rest, [{'&', Col} | Acc], Col + 1);
-lexemes(":=" ++ Rest, Acc, Col) ->
-    lexemes(Rest, [{':=', Col} | Acc], Col + 2);
-lexemes([$: | Rest], Acc, Col) ->
-    lexemes(Rest, [{':', Col} | Acc], Col + 1);
-lexemes(String = [$+, D | _], Acc, Col) when D >= $0, D =< $9 ->
+tokens([$; | Rest], Acc, Col) ->
+    tokens(Rest, [{';', Col} | Acc], Col + 1);
+tokens([$. | Rest], Acc, Col) ->
+    tokens(Rest, [{'.', Col} | Acc], Col + 1);
+tokens([$& | Rest], Acc, Col) ->
+    tokens(Rest, [{'&', Col} | Acc], Col + 1);
+tokens(":=" ++ Rest, Acc, Col) ->
+    tokens(Rest, [{':=', Col} | Acc], Col + 2);
+tokens([$: | Rest], Acc, Col) ->
+    tokens(Rest, [{':', Col} | Acc], Col + 1);
+tokens(String = [$+, D | _], Acc, Col) when D >= $0, D =< $9 ->
     {ok, Number, Col2, Rest} = lexemes_number(String, Col),
-    lexemes(Rest, [{Number, Col} | Acc], Col2);
-lexemes(String = [$-, D | _], Acc, Col) when D >= $0, D =< $9 ->
+    tokens(Rest, [{Number, Col} | Acc], Col2);
+tokens(String = [$-, D | _], Acc, Col) when D >= $0, D =< $9 ->
     {ok, Number, Col2, Rest} = lexemes_number(String, Col),
-    lexemes(Rest, [{Number, Col} | Acc], Col2);
-lexemes(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
+    tokens(Rest, [{Number, Col} | Acc], Col2);
+tokens(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
     {ok, Number, Col2, Rest} = lexemes_number(String, Col),
-    lexemes(Rest, [{Number, Col} | Acc], Col2);
-lexemes([$+ | Rest], Acc, Col) ->
-    lexemes(Rest, [{'+', Col} | Acc], Col + 1);
-lexemes([$? | Rest], Acc, Col) ->
-    lexemes(Rest, [{'?', Col} | Acc], Col + 1);
-lexemes([$[ | Rest], Acc, Col) ->
-    lexemes(Rest, [{'[', Col} | Acc], Col + 1);
-lexemes([$] | Rest], Acc, Col) ->
-    lexemes(Rest, [{']', Col} | Acc], Col + 1);
-lexemes([${ | Rest], Acc, Col) ->
-    lexemes(Rest, [{'{', Col} | Acc], Col + 1);
-lexemes([$} | Rest], Acc, Col) ->
-    lexemes(Rest, [{'}', Col} | Acc], Col + 1);
-lexemes([$( | Rest], Acc, Col) ->
-    lexemes(Rest, [{'(', Col} | Acc], Col + 1);
-lexemes([$) | Rest], Acc, Col) ->
-    lexemes(Rest, [{')', Col} | Acc], Col + 1);
-lexemes([$, | Rest], Acc, Col) ->
-    lexemes(Rest, [{',', Col} | Acc], Col + 1);
-lexemes("<-" ++ Rest, Acc, Col) ->
-    lexemes(Rest, [{'<-', Col} | Acc], Col + 3);
-lexemes("def" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'def', Col} | Acc], Col + 4);
-lexemes("var" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'var', Col} | Acc], Col + 4);
-lexemes("try" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'try', Col} | Acc], Col + 4);
-lexemes("if" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'if', Col} | Acc], Col + 3);
-lexemes("else" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'else', Col} | Acc], Col + 5);
-lexemes("escape" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'escape', Col} | Acc], Col + 7);
-lexemes("catch" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'catch', Col} | Acc], Col + 6);
-lexemes("finally" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'finally', Col} | Acc], Col + 8);
-lexemes("method" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'method', Col} | Acc], Col + 7);
-lexemes("match" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'match', Col} | Acc], Col + 6);
-lexemes("implements" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{'implements', Col} | Acc], Col + 11);
-lexemes("/**" ++ Rest, Acc, Col) ->
+    tokens(Rest, [{Number, Col} | Acc], Col2);
+tokens([$+ | Rest], Acc, Col) ->
+    tokens(Rest, [{'+', Col} | Acc], Col + 1);
+tokens([$? | Rest], Acc, Col) ->
+    tokens(Rest, [{'?', Col} | Acc], Col + 1);
+tokens([$[ | Rest], Acc, Col) ->
+    tokens(Rest, [{'[', Col} | Acc], Col + 1);
+tokens([$] | Rest], Acc, Col) ->
+    tokens(Rest, [{']', Col} | Acc], Col + 1);
+tokens([${ | Rest], Acc, Col) ->
+    tokens(Rest, [{'{', Col} | Acc], Col + 1);
+tokens([$} | Rest], Acc, Col) ->
+    tokens(Rest, [{'}', Col} | Acc], Col + 1);
+tokens([$( | Rest], Acc, Col) ->
+    tokens(Rest, [{'(', Col} | Acc], Col + 1);
+tokens([$) | Rest], Acc, Col) ->
+    tokens(Rest, [{')', Col} | Acc], Col + 1);
+tokens([$, | Rest], Acc, Col) ->
+    tokens(Rest, [{',', Col} | Acc], Col + 1);
+tokens("<-" ++ Rest, Acc, Col) ->
+    tokens(Rest, [{'<-', Col} | Acc], Col + 3);
+tokens("def" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'def', Col} | Acc], Col + 4);
+tokens("var" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'var', Col} | Acc], Col + 4);
+tokens("try" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'try', Col} | Acc], Col + 4);
+tokens("if" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'if', Col} | Acc], Col + 3);
+tokens("else" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'else', Col} | Acc], Col + 5);
+tokens("escape" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'escape', Col} | Acc], Col + 7);
+tokens("catch" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'catch', Col} | Acc], Col + 6);
+tokens("finally" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'finally', Col} | Acc], Col + 8);
+tokens("method" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'method', Col} | Acc], Col + 7);
+tokens("match" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'match', Col} | Acc], Col + 6);
+tokens("implements" ++ [S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{'implements', Col} | Acc], Col + 11);
+tokens("/**" ++ Rest, Acc, Col) ->
     ConsumeComment = fun(Data, Accum, ColArg) ->
         case read_until(Data, "*/", ColArg) of
             {ok, Comment, Remain, Col2} ->
@@ -202,30 +205,30 @@ lexemes("/**" ++ Rest, Acc, Col) ->
         end
     end,
     case ConsumeComment(Rest, [{'/**', Col} | Acc], Col + 3) of
-        {ok, Acc2, Rest2, Col2} -> lexemes(Rest2, Acc2, Col2);
+        {ok, Acc2, Rest2, Col2} -> tokens(Rest2, Acc2, Col2);
         {more, Acc2, Col2} -> {more, Acc2, Col2, ConsumeComment}
     end;
-lexemes("*/" ++ Rest, Acc, Col) ->
-    lexemes(Rest, [{'*/', Col} | Acc], Col + 2);
-lexemes(String = [$" | _], Acc, Col) ->
+tokens("*/" ++ Rest, Acc, Col) ->
+    tokens(Rest, [{'*/', Col} | Acc], Col + 2);
+tokens(String = [$" | _], Acc, Col) ->
     {ok, Str, Col2, Rest} = lexemes_string(String, Col + 1),
-    lexemes(Rest, [{{string, Str}, Col} | Acc], Col2);
-lexemes(String = [$' | _], Acc, Col) ->
+    tokens(Rest, [{{string, Str}, Col} | Acc], Col2);
+tokens(String = [$' | _], Acc, Col) ->
     {ok, Char, Col2, Rest} = lexemes_char(String, Col),
-    lexemes(Rest, [{Char, Col} | Acc], Col2);
-lexemes([$_, S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, [{$_, Col} | Acc], Col + 2);
-lexemes([$_, $; | Rest], Acc, Col) ->
-    lexemes(Rest, [{$;, Col + 1}, {$_, Col} | Acc], Col + 2);
-lexemes(String = [S | _], Acc, Col) when S == $_; S >= $a, S =< $z; S >= $A, S =< $Z ->
+    tokens(Rest, [{Char, Col} | Acc], Col2);
+tokens([$_, S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, [{$_, Col} | Acc], Col + 2);
+tokens([$_, $; | Rest], Acc, Col) ->
+    tokens(Rest, [{$;, Col + 1}, {$_, Col} | Acc], Col + 2);
+tokens(String = [S | _], Acc, Col) when S == $_; S >= $a, S =< $z; S >= $A, S =< $Z ->
     {ok, Id, Col2, Rest} = lexemes_identifier(String, Col),
-    lexemes(Rest, [{{identifier, Id}, Col} | Acc], Col2);
-lexemes(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
+    tokens(Rest, [{{identifier, Id}, Col} | Acc], Col2);
+tokens(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
     {ok, Number, Rest, Col2} = lexemes_number(String, Col),
-    lexemes(Rest, [{Number, Col} | Acc], Col2);
-lexemes([S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
-    lexemes(Rest, Acc, Col + 1);
-lexemes(String, Acc, Col) ->
+    tokens(Rest, [{Number, Col} | Acc], Col2);
+tokens([S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
+    tokens(Rest, Acc, Col + 1);
+tokens(String, Acc, Col) ->
     erlang:error(io_lib:format("unexepected input: \"~p\"~nAcc: ~p~nCol:~p~n", [String, Acc, Col])).
 
 read_until(String, To, Col) ->
@@ -319,11 +322,11 @@ lexemes_test_() ->
                     {4, 17}
                 ],
                 18},
-            lexemes("def x := 3; y := 4", true)
+            tokens("def x := 3; y := 4", true)
         ),
         ?_assertMatch(
             {ok, [{'&', 0}, {{identifier, "x"}, 1}, {':=', 3}, {4, 6}, {';', 7}], 8},
-            lexemes("&x := 4;", true)
+            tokens("&x := 4;", true)
         )
     ].
 
