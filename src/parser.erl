@@ -68,12 +68,12 @@ scan(IO, PrevLine, Acc, Input, Cont) ->
             case Cont of
                 none ->
                     case tokens(Data) of
-                        {ok, Lexemes, _} ->
-                            Tokens = scan_tokens(Lexemes, Line),
+                        {ok, Tokens, _} ->
+                            UpdatedTokens = update_line(Tokens, Line),
                             Acc2 =
                                 case Acc of
-                                    [] -> [Tokens];
-                                    _ -> [Tokens | Acc]
+                                    [] -> [UpdatedTokens];
+                                    _ -> [UpdatedTokens | Acc]
                                 end,
                             scan(IO, Line, Acc2, "", none);
                         {more, Acc2, _Col, Cont} ->
@@ -96,7 +96,7 @@ scan(IO, PrevLine, Acc, Input, Cont) ->
             {ok, Tokens}
     end.
 
-scan_tokens(Tokens, Line) ->
+update_line(Tokens, Line) ->
     lists:map(
         fun({Token, Col}) ->
             Position = {Line, Col},
@@ -116,8 +116,15 @@ process(I) when is_integer(I) -> {integer, I};
 process(Term = {Cat, _Sym}) when is_atom(Cat) -> Term;
 process(X) -> {unexpected, X}.
 
--spec tokens(String :: list()) -> {ok, Tokens, EndPosition} when
-    Token :: {atom(), list() | atom(), integer()} | {error, list()},
+-spec tokens(String :: list()) -> {ok, Tokens, EndPosition} | {more, Tokens, Column, Cont} when
+    Cont :: function(),
+    Category :: atom(),
+    Line :: integer(),
+    Column :: integer(),
+    Terminal :: atom(),
+    Position :: {Line, Column},
+    Symbol :: list(),
+    Token :: {Category, Position, Symbol} | {Terminal, Symbol},
     EndPosition :: integer(),
     Tokens :: [Token].
 tokens(String) ->
