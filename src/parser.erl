@@ -100,20 +100,13 @@ update_line(Tokens, Line) ->
     lists:map(
         fun({Token, Col}) ->
             Position = {Line, Col},
-            Token2 = process(Token),
-            case Token2 of
+            case Token of
                 {Cat, Sym} -> {Cat, Position, Sym};
-                _ -> {Token2, Position}
+                _ -> {Token, Position}
             end
         end,
         Tokens
     ).
-
-%% TODO This is really not needed if Tokens are correctly returned by lexemes
-process(Atom) when is_atom(Atom) -> Atom;
-process(F) when is_float(F) -> {float64, F};
-process(I) when is_integer(I) -> {integer, I};
-process(Term = {Cat, _Sym}) when is_atom(Cat) -> Term.
 
 -spec tokens(String :: list()) -> {ok, Tokens, EndPosition} | {more, Tokens, Column, Cont} when
     Cont :: function(),
@@ -158,7 +151,12 @@ tokens(String = [$-, D | _], Acc, Col) when D >= $0, D =< $9 ->
     tokens(Rest, [{Number, Col} | Acc], Col2);
 tokens(String = [D | _], Acc, Col) when D >= $0, D =< $9 ->
     {ok, Number, Col2, Rest} = lexemes_number(String, Col),
-    tokens(Rest, [{Number, Col} | Acc], Col2);
+    Type =
+        if
+            is_float(Number) -> float64;
+            true -> integer
+        end,
+    tokens(Rest, [{{Type, Number}, Col} | Acc], Col2);
 tokens([$+ | Rest], Acc, Col) ->
     tokens(Rest, [{'+', Col} | Acc], Col + 1);
 tokens([$? | Rest], Acc, Col) ->
@@ -221,7 +219,7 @@ tokens(String = [$" | _], Acc, Col) ->
     tokens(Rest, [{{string, Str}, Col} | Acc], Col2);
 tokens(String = [$' | _], Acc, Col) ->
     {ok, Char, Col2, Rest} = lexemes_char(String, Col),
-    tokens(Rest, [{Char, Col} | Acc], Col2);
+    tokens(Rest, [{{char, Char}, Col} | Acc], Col2);
 tokens([$_, S | Rest], Acc, Col) when is_map_key(S, ?Spaces) ->
     tokens(Rest, [{$_, Col} | Acc], Col + 2);
 tokens([$_, $; | Rest], Acc, Col) ->
@@ -274,7 +272,6 @@ lexemes_number([$+ | Rest], Col) ->
     lexemes_number(Rest, Col + 1, []);
 lexemes_number([$- | Rest], Col) ->
     Res = lexemes_number(Rest, Col + 1, []),
-    io:format("Res = ~p~n", [Res]),
     {ok, Num, Col2, String} = Res,
     {ok, -Num, Col2, String};
 lexemes_number([D | Rest], Col) when D >= $0, D =< $9 ->
@@ -313,7 +310,7 @@ lexemes_number_test_() ->
         ?_assertMatch({ok, 2334, 1 + 5, " def"}, lexemes_number("+2334 def", 1)),
         ?_assertMatch({ok, 4, 1, ";"}, lexemes_number("4;", 0))
     ].
-lexemes_test_() ->
+tokens_test_() ->
     [
         ?_assertMatch(
             {ok,
@@ -321,18 +318,21 @@ lexemes_test_() ->
                     {'def', 0},
                     {{identifier, "x"}, 4},
                     {':=', 6},
-                    {3, 9},
+                    {{integer, 3}, 9},
                     {';', 10},
                     {{identifier, "y"}, 12},
                     {':=', 14},
-                    {4, 17}
+                    {{integer, 4}, 17}
                 ],
                 18},
             tokens("def x := 3; y := 4", true)
         ),
         ?_assertMatch(
-            {ok, [{'&', 0}, {{identifier, "x"}, 1}, {':=', 3}, {4, 6}, {';', 7}], 8},
+            {ok, [{'&', 0}, {{identifier, "x"}, 1}, {':=', 3}, {{integer, 4}, 6}, {';', 7}], 8},
             tokens("&x := 4;", true)
+        ),
+        ?_assertMatch(
+            {ok, [{{identifier, "x"}, 0}, {':=', 2}, {{char, 55}, 5}], 8}, tokens("x := '7'", true)
         )
     ].
 
